@@ -1,29 +1,26 @@
-// src/pages/Auth.tsx
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
-import { GraduationCap } from "lucide-react";
+import { Eye, EyeOff, Mail, Lock, User } from "lucide-react";
+import "./Auth.css";
 
 export default function Auth() {
   const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [activeTab, setActiveTab] = useState<"login" | "signup">("login");
+
+  // Login state
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
+  const [loginErrors, setLoginErrors] = useState<{ email?: string; password?: string }>({});
+
+  // Signup state
+  const [signupName, setSignupName] = useState("");
   const [signupEmail, setSignupEmail] = useState("");
   const [signupPassword, setSignupPassword] = useState("");
-  const [signupName, setSignupName] = useState("");
+  const [signupErrors, setSignupErrors] = useState<{ name?: string; email?: string; password?: string }>({});
+
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user, signIn, signUp } = useAuth();
@@ -34,8 +31,39 @@ export default function Auth() {
     }
   }, [user, navigate]);
 
+  const validateLoginForm = () => {
+    const errors: typeof loginErrors = {};
+    if (!loginEmail) errors.email = "Email is required";
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(loginEmail)) {
+      errors.email = "Invalid email format";
+    }
+    if (!loginPassword) errors.password = "Password is required";
+    else if (loginPassword.length < 6) {
+      errors.password = "Password must be at least 6 characters";
+    }
+    return errors;
+  };
+
+  const validateSignupForm = () => {
+    const errors: typeof signupErrors = {};
+    if (!signupName) errors.name = "Name is required";
+    if (!signupEmail) errors.email = "Email is required";
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(signupEmail)) {
+      errors.email = "Invalid email format";
+    }
+    if (!signupPassword) errors.password = "Password is required";
+    else if (signupPassword.length < 6) {
+      errors.password = "Password must be at least 6 characters";
+    }
+    return errors;
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    const errors = validateLoginForm();
+    setLoginErrors(errors);
+    if (Object.keys(errors).length > 0) return;
+
     setIsLoading(true);
     try {
       const result = await signIn(loginEmail.trim(), loginPassword);
@@ -50,7 +78,6 @@ export default function Auth() {
           title: "Login Successful",
           description: "Welcome back!",
         });
-        // navigate after successful login
         navigate("/dashboard");
       }
     } catch (err: any) {
@@ -66,6 +93,10 @@ export default function Auth() {
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
+    const errors = validateSignupForm();
+    setSignupErrors(errors);
+    if (Object.keys(errors).length > 0) return;
+
     setIsLoading(true);
     try {
       const result = await signUp(signupName.trim(), signupEmail.trim(), signupPassword);
@@ -78,9 +109,8 @@ export default function Auth() {
       } else {
         toast({
           title: "Account Created",
-          description: "Account created successfully. Redirecting...",
+          description: "Welcome to ExamSeat Pro!",
         });
-        // navigate after successful signup (context will have stored token/user if backend returned token)
         navigate("/dashboard");
       }
     } catch (err: any) {
@@ -95,103 +125,201 @@ export default function Auth() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/5 via-background to-accent/5 p-4">
-      <Card className="w-full max-w-md shadow-lg">
-        <CardHeader className="space-y-1 text-center">
-          <div className="flex justify-center mb-4">
-            <div className="p-3 bg-primary rounded-full">
-              <GraduationCap className="h-8 w-8 text-primary-foreground" />
-            </div>
+    <div className="auth-container">
+      <div className="auth-background">
+        <div className="auth-gradient-1"></div>
+        <div className="auth-gradient-2"></div>
+      </div>
+
+      <div className="auth-content">
+        <div className="auth-card">
+          {/* Header */}
+          <div className="auth-header">
+            <div className="auth-logo">📚</div>
+            <h1>ExamSeat Pro</h1>
+            <p>Exam Hall Seating Management System</p>
           </div>
-          <CardTitle className="text-2xl font-bold">ExamSeat Pro</CardTitle>
-          <CardDescription>Exam Hall Seating Management System</CardDescription>
-        </CardHeader>
 
-        <Tabs defaultValue="login" className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="login">Login</TabsTrigger>
-            <TabsTrigger value="signup">Sign Up</TabsTrigger>
-          </TabsList>
+          {/* Tabs */}
+          <div className="auth-tabs">
+            <button
+              className={`tab-button ${activeTab === "login" ? "active" : ""}`}
+              onClick={() => setActiveTab("login")}
+            >
+              Login
+            </button>
+            <button
+              className={`tab-button ${activeTab === "signup" ? "active" : ""}`}
+              onClick={() => setActiveTab("signup")}
+            >
+              Sign Up
+            </button>
+          </div>
 
-          <TabsContent value="login">
-            <form onSubmit={handleLogin}>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="login-email">Email</Label>
-                  <Input
+          {/* Login Form */}
+          {activeTab === "login" && (
+            <form onSubmit={handleLogin} className="auth-form">
+              <div className="form-group">
+                <label htmlFor="login-email">Email Address</label>
+                <div className="input-wrapper">
+                  <Mail className="input-icon" />
+                  <input
                     id="login-email"
                     type="email"
                     placeholder="admin@college.edu"
                     value={loginEmail}
-                    onChange={(e) => setLoginEmail(e.target.value)}
-                    required
+                    onChange={(e) => {
+                      setLoginEmail(e.target.value);
+                      setLoginErrors({ ...loginErrors, email: undefined });
+                    }}
+                    className={loginErrors.email ? "input-error" : ""}
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="login-password">Password</Label>
-                  <Input
-                    id="login-password"
-                    type="password"
-                    value={loginPassword}
-                    onChange={(e) => setLoginPassword(e.target.value)}
-                    required
-                  />
-                </div>
-              </CardContent>
-              <CardFooter>
-                <Button type="submit" className="w-full" disabled={isLoading}>
-                  {isLoading ? "Signing in..." : "Sign In"}
-                </Button>
-              </CardFooter>
-            </form>
-          </TabsContent>
+                {loginErrors.email && (
+                  <span className="error-message">{loginErrors.email}</span>
+                )}
+              </div>
 
-          <TabsContent value="signup">
-            <form onSubmit={handleSignup}>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="signup-name">Full Name</Label>
-                  <Input
+              <div className="form-group">
+                <label htmlFor="login-password">Password</label>
+                <div className="input-wrapper">
+                  <Lock className="input-icon" />
+                  <input
+                    id="login-password"
+                    type={showPassword ? "text" : "password"}
+                    placeholder="••••••••"
+                    value={loginPassword}
+                    onChange={(e) => {
+                      setLoginPassword(e.target.value);
+                      setLoginErrors({ ...loginErrors, password: undefined });
+                    }}
+                    className={loginErrors.password ? "input-error" : ""}
+                  />
+                  <button
+                    type="button"
+                    className="toggle-password"
+                    onClick={() => setShowPassword(!showPassword)}
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+                {loginErrors.password && (
+                  <span className="error-message">{loginErrors.password}</span>
+                )}
+              </div>
+
+              <button
+                type="submit"
+                className="btn btn-primary btn-block"
+                disabled={isLoading}
+              >
+                {isLoading ? "Signing in..." : "Sign In"}
+              </button>
+            </form>
+          )}
+
+          {/* Signup Form */}
+          {activeTab === "signup" && (
+            <form onSubmit={handleSignup} className="auth-form">
+              <div className="form-group">
+                <label htmlFor="signup-name">Full Name</label>
+                <div className="input-wrapper">
+                  <User className="input-icon" />
+                  <input
                     id="signup-name"
                     type="text"
                     placeholder="John Doe"
                     value={signupName}
-                    onChange={(e) => setSignupName(e.target.value)}
-                    required
+                    onChange={(e) => {
+                      setSignupName(e.target.value);
+                      setSignupErrors({ ...signupErrors, name: undefined });
+                    }}
+                    className={signupErrors.name ? "input-error" : ""}
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="signup-email">Email</Label>
-                  <Input
+                {signupErrors.name && (
+                  <span className="error-message">{signupErrors.name}</span>
+                )}
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="signup-email">Email Address</label>
+                <div className="input-wrapper">
+                  <Mail className="input-icon" />
+                  <input
                     id="signup-email"
                     type="email"
                     placeholder="you@college.edu"
                     value={signupEmail}
-                    onChange={(e) => setSignupEmail(e.target.value)}
-                    required
+                    onChange={(e) => {
+                      setSignupEmail(e.target.value);
+                      setSignupErrors({ ...signupErrors, email: undefined });
+                    }}
+                    className={signupErrors.email ? "input-error" : ""}
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="signup-password">Password</Label>
-                  <Input
+                {signupErrors.email && (
+                  <span className="error-message">{signupErrors.email}</span>
+                )}
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="signup-password">Password</label>
+                <div className="input-wrapper">
+                  <Lock className="input-icon" />
+                  <input
                     id="signup-password"
-                    type="password"
+                    type={showPassword ? "text" : "password"}
+                    placeholder="••••••••"
                     value={signupPassword}
-                    onChange={(e) => setSignupPassword(e.target.value)}
-                    required
-                    minLength={6}
+                    onChange={(e) => {
+                      setSignupPassword(e.target.value);
+                      setSignupErrors({ ...signupErrors, password: undefined });
+                    }}
+                    className={signupErrors.password ? "input-error" : ""}
                   />
+                  <button
+                    type="button"
+                    className="toggle-password"
+                    onClick={() => setShowPassword(!showPassword)}
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
                 </div>
-              </CardContent>
-              <CardFooter>
-                <Button type="submit" className="w-full" disabled={isLoading}>
-                  {isLoading ? "Creating account..." : "Create Account"}
-                </Button>
-              </CardFooter>
+                {signupErrors.password && (
+                  <span className="error-message">{signupErrors.password}</span>
+                )}
+              </div>
+
+              <button
+                type="submit"
+                className="btn btn-primary btn-block"
+                disabled={isLoading}
+              >
+                {isLoading ? "Creating account..." : "Create Account"}
+              </button>
             </form>
-          </TabsContent>
-        </Tabs>
-      </Card>
+          )}
+
+          {/* Footer */}
+          <div className="auth-footer">
+            <p>
+              {activeTab === "login"
+                ? "Don't have an account? "
+                : "Already have an account? "}
+              <button
+                type="button"
+                className="link-button"
+                onClick={() =>
+                  setActiveTab(activeTab === "login" ? "signup" : "login")
+                }
+              >
+                {activeTab === "login" ? "Sign Up" : "Login"}
+              </button>
+            </p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

@@ -3,23 +3,41 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
-const bcrypt = require('bcryptjs');               // changed from bcrypt
+const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { query, pool } = require('./db');         // now import pool for shutdown/checks
+const { query, pool } = require('./db');
 
 const app = express();
 
 // Config
-const PORT = process.env.PORT || 4000;
+const PORT = parseInt(process.env.PORT || '4000', 10);
 const FRONTEND_URL = process.env.FRONTEND_URL || process.env.CORS_ORIGIN || 'http://localhost:3000';
 const JWT_SECRET = process.env.JWT_SECRET || 'supersecretkey123456';
+const NODE_ENV = (process.env.NODE_ENV || 'development').toLowerCase();
+const isProd = NODE_ENV === 'production';
 
 // Middlewares
 app.use(helmet());
 app.use(express.json());
+
+// CORS: allow FRONTEND_URL in production, plus local dev origins when not production
+const allowedOrigins = new Set();
+if (FRONTEND_URL) allowedOrigins.add(FRONTEND_URL);
+if (!isProd) {
+  allowedOrigins.add('http://localhost:5173');
+  allowedOrigins.add('http://127.0.0.1:5173');
+  allowedOrigins.add('http://localhost:3000');
+  allowedOrigins.add('http://127.0.0.1:3000');
+}
+
 app.use(
   cors({
-    origin: FRONTEND_URL === '*' ? '*' : FRONTEND_URL,
+    origin: (origin, callback) => {
+      // allow non-browser requests (curl/postman) with no origin
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.has(origin) || allowedOrigins.has('*')) return callback(null, true);
+      return callback(new Error('CORS origin not allowed'), false);
+    },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true,
@@ -37,16 +55,11 @@ app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 // Signup
 app.post('/api/auth/signup', async (req, res) => {
   try {
-    const { name, email, password } = req.body;
-    if (!name || !email || !password) {
-      return res.status(400).json({ error: 'Missing fields' });
-    }
+    const { name, email, password } = req.body || {};
+    if (!name || !email || !password) return res.status(400).json({ error: 'Missing fields' });
 
-    // check existing user
     const existing = await query('SELECT id FROM users WHERE email = $1', [email.toLowerCase()]);
-    if (existing.rows.length > 0) {
-      return res.status(409).json({ error: 'Email already registered' });
-    }
+    if (existing.rows.length > 0) return res.status(409).json({ error: 'Email already registered' });
 
     const password_hash = await bcrypt.hash(password, 10);
     const result = await query(
@@ -68,7 +81,7 @@ app.post('/api/auth/signup', async (req, res) => {
 // Login
 app.post('/api/auth/login', async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password } = req.body || {};
     if (!email || !password) return res.status(400).json({ error: 'Missing email or password' });
 
     const result = await query('SELECT * FROM users WHERE email = $1', [email.toLowerCase()]);
@@ -86,13 +99,13 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-// Validate token (used by frontend to check session)
+// Validate token
 app.get('/api/auth/validate', async (req, res) => {
   try {
     const auth = req.headers.authorization;
     if (!auth) return res.status(401).json({ valid: false });
 
-    const token = auth.split(' ')[1];
+    const token = String(auth).split(' ')[1];
     let payload;
     try {
       payload = jwt.verify(token, JWT_SECRET);
@@ -122,13 +135,13 @@ app.get('/api/stats', async (req, res) => {
       query('SELECT COUNT(*) FROM seat_allocations'),
     ]);
     res.json({
-      totalStudents: Number(students.rows[0].count),
-      totalRooms: Number(rooms.rows[0].count),
-      totalExams: Number(exams.rows[0].count),
-      totalAllocations: Number(allocations.rows[0].count),
+      totalStudents: Number(students.rows[0].count || 0),
+      totalRooms: Number(rooms.rows[0].count || 0),
+      totalExams: Number(exams.rows[0].count || 0),
+      totalAllocations: Number(allocations.rows[0].count || 0),
     });
   } catch (err) {
-    console.error(err);
+    console.error('GET /api/stats error:', err);
     res.status(500).json({ error: 'Error fetching stats' });
   }
 });
@@ -141,16 +154,14 @@ app.get('/api/students', async (req, res) => {
     const result = await query('SELECT * FROM students ORDER BY roll_number ASC');
     res.json(result.rows);
   } catch (err) {
-    console.error(err);
+    console.error('GET /api/students error:', err);
     res.status(500).json({ error: 'Error fetching students' });
   }
 });
 
 app.post('/api/students', async (req, res) => {
-  const { roll_number, name, department, semester, section, email } = req.body;
-  if (!roll_number || !name || !department || !semester) {
-    return res.status(400).json({ error: 'Missing required fields' });
-  }
+  const { roll_number, name, department, semester, section, email } = req.body || {};
+  if (!roll_number || !name || !department || !semester) return res.status(400).json({ error: 'Missing required fields' });
   try {
     const result = await query(
       `INSERT INTO students (roll_number, name, department, semester, section, email)
@@ -159,7 +170,7 @@ app.post('/api/students', async (req, res) => {
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    console.error(err);
+    console.error('POST /api/students error:', err);
     if (err.code === '23505') return res.status(409).json({ error: 'Roll number exists' });
     res.status(500).json({ error: 'Error creating student' });
   }
@@ -173,14 +184,14 @@ app.get('/api/rooms', async (req, res) => {
     const result = await query('SELECT * FROM rooms ORDER BY room_number ASC');
     res.json(result.rows);
   } catch (err) {
-    console.error(err);
+    console.error('GET /api/rooms error:', err);
     res.status(500).json({ error: 'Error fetching rooms' });
   }
 });
 
 app.post('/api/rooms', async (req, res) => {
-  const { room_number, building, floor, capacity, rows, columns } = req.body;
-  if (!room_number || !capacity) return res.status(400).json({ error: 'room_number and capacity required' });
+  const { room_number, building, floor, capacity, rows, columns } = req.body || {};
+  if (!room_number || typeof capacity === 'undefined') return res.status(400).json({ error: 'room_number and capacity required' });
   try {
     const result = await query(
       `INSERT INTO rooms (room_number, building, floor, capacity, rows, columns)
@@ -189,7 +200,7 @@ app.post('/api/rooms', async (req, res) => {
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    console.error(err);
+    console.error('POST /api/rooms error:', err);
     if (err.code === '23505') return res.status(409).json({ error: 'Room number exists' });
     res.status(500).json({ error: 'Error creating room' });
   }
@@ -203,7 +214,7 @@ app.get('/api/exams', async (req, res) => {
     const result = await query('SELECT * FROM exams ORDER BY exam_date ASC, exam_time ASC');
     res.json(result.rows);
   } catch (err) {
-    console.error(err);
+    console.error('GET /api/exams error:', err);
     res.status(500).json({ error: 'Error fetching exams' });
   }
 });
@@ -215,13 +226,13 @@ app.get('/api/exams/:id', async (req, res) => {
     if (result.rowCount === 0) return res.status(404).json({ error: 'Exam not found' });
     res.json(result.rows[0]);
   } catch (err) {
-    console.error(err);
+    console.error('GET /api/exams/:id error:', err);
     res.status(500).json({ error: 'Error fetching exam' });
   }
 });
 
 app.post('/api/exams', async (req, res) => {
-  const { course_code, course_name, exam_date, exam_time, department, semester, duration_minutes } = req.body;
+  const { course_code, course_name, exam_date, exam_time, department, semester, duration_minutes } = req.body || {};
   if (!course_code || !course_name || !exam_date || !exam_time || !department || !semester || !duration_minutes) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
@@ -234,7 +245,7 @@ app.post('/api/exams', async (req, res) => {
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    console.error(err);
+    console.error('POST /api/exams error:', err);
     res.status(500).json({ error: 'Error creating exam' });
   }
 });
@@ -243,7 +254,7 @@ app.post('/api/exams', async (req, res) => {
 // Seating generation (server-side)
 // -------------------------
 app.post('/api/seating/generate', async (req, res) => {
-  const { examId } = req.body;
+  const { examId } = req.body || {};
   if (!examId) return res.status(400).json({ error: 'examId is required' });
 
   try {
@@ -271,7 +282,6 @@ app.post('/api/seating/generate', async (req, res) => {
     for (const room of rooms) {
       if (studentIndex >= students.length) break;
       const capacity = Number(room.capacity) || 0;
-      const rows = Number(room.rows) || 1;
       const cols = Number(room.columns) || capacity || 1;
 
       for (let seat = 1; seat <= capacity && studentIndex < students.length; seat++) {
@@ -314,7 +324,7 @@ app.post('/api/seating/generate', async (req, res) => {
 
     res.json({ message: 'Seating generated', totalAllocated: allocations.length });
   } catch (err) {
-    console.error(err);
+    console.error('POST /api/seating/generate error:', err);
     res.status(500).json({ error: 'Error generating seating' });
   }
 });
@@ -324,10 +334,9 @@ app.post('/api/seating/generate', async (req, res) => {
 // -------------------------
 app.get('/api/seating_allocations', async (req, res) => {
   try {
-    const { exam_id, limit, include, order } = req.query;
+    const { exam_id, limit, include, order } = req.query || {};
     const includes = String(include || '').split(',').map((s) => s.trim()).filter(Boolean);
 
-    // Base select fields
     let select = `sa.*`;
     let joins = ``;
 
@@ -355,15 +364,18 @@ app.get('/api/seating_allocations', async (req, res) => {
 
     let sql = `SELECT ${select} FROM seat_allocations sa ${joins}`;
     const params = [];
+
     if (exam_id) {
       params.push(exam_id);
       sql += ` WHERE sa.exam_id = $${params.length}`;
     }
+
     if (order) {
       sql += ` ORDER BY ${String(order)}`;
     } else {
       sql += ` ORDER BY sa.room_id, sa.seat_number`;
     }
+
     if (limit) {
       sql += ` LIMIT ${Number(limit)}`;
     }
@@ -371,6 +383,7 @@ app.get('/api/seating_allocations', async (req, res) => {
     const result = await query(sql, params);
     const rows = result.rows.map((r) => {
       const out = { ...r };
+      // json_build_object returns proper JSON types; if PG driver returns string, parse it
       if (out.students && typeof out.students === 'string') {
         try { out.students = JSON.parse(out.students); } catch (e) {}
       }
@@ -389,10 +402,8 @@ app.get('/api/seating_allocations', async (req, res) => {
 
 app.post('/api/seating_allocations', async (req, res) => {
   try {
-    const { allocations } = req.body;
-    if (!Array.isArray(allocations) || allocations.length === 0) {
-      return res.status(400).json({ error: 'allocations array required' });
-    }
+    const { allocations } = req.body || {};
+    if (!Array.isArray(allocations) || allocations.length === 0) return res.status(400).json({ error: 'allocations array required' });
 
     for (const a of allocations) {
       if (typeof a.exam_id === 'undefined' || typeof a.student_id === 'undefined' || typeof a.room_id === 'undefined' || typeof a.seat_number === 'undefined') {
@@ -423,7 +434,7 @@ app.post('/api/seating_allocations', async (req, res) => {
 
 app.delete('/api/seating_allocations', async (req, res) => {
   try {
-    const { exam_id } = req.query;
+    const { exam_id } = req.query || {};
     if (!exam_id) return res.status(400).json({ error: 'exam_id query required' });
 
     const result = await query('DELETE FROM seat_allocations WHERE exam_id = $1', [exam_id]);
@@ -453,7 +464,7 @@ app.get('/api/reports/room-wise', async (req, res) => {
     );
     res.json(result.rows);
   } catch (err) {
-    console.error(err);
+    console.error('GET /api/reports/room-wise error:', err);
     res.status(500).json({ error: 'Error fetching room-wise report' });
   }
 });
@@ -474,7 +485,7 @@ app.get('/api/reports/student-wise', async (req, res) => {
     );
     res.json(result.rows);
   } catch (err) {
-    console.error(err);
+    console.error('GET /api/reports/student-wise error:', err);
     res.status(500).json({ error: 'Error fetching student-wise report' });
   }
 });
@@ -499,7 +510,7 @@ process.on('SIGTERM', () => shutdown('SIGTERM'));
 
 (async function start() {
   try {
-    await query('SELECT 1'); // quick DB check
+    await query('SELECT 1');
     app.listen(PORT, () => console.log(`API listening on port ${PORT}`));
   } catch (err) {
     console.error('Failed to start: DB connection error', err);

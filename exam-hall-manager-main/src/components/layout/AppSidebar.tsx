@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/sidebar";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
+import "./AppSidebar.css";
 
 const menuItems = [
   { key: "dashboard", title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
@@ -24,12 +25,18 @@ const menuItems = [
   { key: "seating", title: "Seating", url: "/seating", icon: MapPin },
 ];
 
+// SAFELY derive API base: support both VITE_API_BASE_URL and VITE_API_URL
+const API_BASE =
+  import.meta.env.VITE_API_BASE_URL ||
+  import.meta.env.VITE_API_URL ||
+  ""; // if empty, fetch hits same origin (works in dev+Render if you use a proxy)
+
 export function AppSidebar() {
   const { state } = useSidebar();
   const { signOut } = useAuth();
   const isCollapsed = state === "collapsed";
 
-  const [stats, setStats] = useState<{ totalStudents: number; totalRooms: number; totalExams: number; totalAllocations: number }>({
+  const [stats, setStats] = useState({
     totalStudents: 0,
     totalRooms: 0,
     totalExams: 0,
@@ -38,75 +45,72 @@ export function AppSidebar() {
 
   useEffect(() => {
     let mounted = true;
-    const API = import.meta.env.VITE_API_BASE_URL || "";
+
     (async () => {
       try {
-        const res = await fetch(`${API}/api/stats`);
+        const res = await fetch(`${API_BASE}/api/stats`);
         if (!res.ok) return;
         const data = await res.json();
-        if (mounted) {
-          setStats({
-            totalStudents: Number(data.totalStudents || 0),
-            totalRooms: Number(data.totalRooms || 0),
-            totalExams: Number(data.totalExams || 0),
-            totalAllocations: Number(data.totalAllocations || 0),
-          });
-        }
+        if (!mounted) return;
+
+        setStats({
+          totalStudents: Number(data.totalStudents || 0),
+          totalRooms: Number(data.totalRooms || 0),
+          totalExams: Number(data.totalExams || 0),
+          totalAllocations: Number(data.totalAllocations || 0),
+        });
       } catch {
-        /* ignore errors silently */
+        // silent fail: sidebar still renders, just with 0s
       }
     })();
+
     return () => {
       mounted = false;
     };
   }, []);
 
   return (
-    <Sidebar collapsible="icon" className="border-r border-border">
-      <div className="flex items-center justify-between p-4 border-b border-border">
-        {!isCollapsed && (
-          <div className="flex flex-col">
-            <h2 className="text-lg font-semibold text-foreground">ExamSeat Pro</h2>
-            <div className="text-xs text-muted-foreground mt-1">
-              {stats.totalStudents} students • {stats.totalRooms} rooms
+    <Sidebar collapsible="icon" className="app-sidebar">
+      {/* Logo Section */}
+      <div className="sidebar-header">
+        <div className="sidebar-logo">
+          <div className="logo-icon">📚</div>
+          {!isCollapsed && (
+            <div className="logo-text">
+              <div className="logo-title">ExamSeat</div>
+              <div className="logo-subtitle">Pro</div>
             </div>
-          </div>
-        )}
-        <SidebarTrigger className="ml-auto" />
+          )}
+        </div>
+        <SidebarTrigger className="sidebar-trigger" />
       </div>
 
-      <SidebarContent>
+      <SidebarContent className="sidebar-content">
+        {/* Main Menu */}
         <SidebarGroup>
-          {!isCollapsed && <SidebarGroupLabel>Main</SidebarGroupLabel>}
+          {!isCollapsed && <SidebarGroupLabel className="sidebar-label">Main</SidebarGroupLabel>}
 
           <SidebarGroupContent>
-            <SidebarMenu>
+            <SidebarMenu className="sidebar-menu">
               {menuItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
+                <SidebarMenuItem key={item.key} className="sidebar-menu-item">
                   <SidebarMenuButton asChild>
                     <NavLink
                       to={item.url}
-                      className="flex items-center gap-3 hover:bg-sidebar-accent px-2 py-1 rounded"
-                      activeClassName="bg-sidebar-accent text-sidebar-primary font-medium"
+                      className="sidebar-link"
+                      activeClassName="sidebar-link-active"
                     >
-                      <item.icon className="h-4 w-4" />
+                      <item.icon className="icon" />
                       {!isCollapsed && (
-                        <div className="flex items-center justify-between w-full">
-                          <span>{item.title}</span>
-                          {/* small badge/stats */}
-                          {item.key === "students" && (
-                            <span className="text-xs text-muted-foreground">{stats.totalStudents}</span>
-                          )}
-                          {item.key === "rooms" && (
-                            <span className="text-xs text-muted-foreground">{stats.totalRooms}</span>
-                          )}
-                          {item.key === "exams" && (
-                            <span className="text-xs text-muted-foreground">{stats.totalExams}</span>
-                          )}
-                          {item.key === "dashboard" && (
-                            <span className="text-xs text-muted-foreground">{stats.totalAllocations} allocations</span>
-                          )}
-                        </div>
+                        <>
+                          <span className="link-text">{item.title}</span>
+                          <span className="link-count">
+                            {item.key === "students" && stats.totalStudents}
+                            {item.key === "rooms" && stats.totalRooms}
+                            {item.key === "exams" && stats.totalExams}
+                            {item.key === "dashboard" && stats.totalAllocations}
+                          </span>
+                        </>
                       )}
                     </NavLink>
                   </SidebarMenuButton>
@@ -116,14 +120,15 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <div className="mt-auto p-4 border-t border-border">
+        {/* User Section */}
+        <div className="sidebar-footer">
           <Button
             variant="ghost"
-            className="w-full justify-start text-muted-foreground hover:text-foreground"
+            className="sidebar-logout"
             onClick={signOut}
           >
-            <LogOut className="h-4 w-4 mr-2" />
-            {!isCollapsed && "Sign Out"}
+            <LogOut className="icon" />
+            {!isCollapsed && <span>Sign Out</span>}
           </Button>
         </div>
       </SidebarContent>

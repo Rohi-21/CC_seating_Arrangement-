@@ -1,9 +1,11 @@
 // src/components/layout/DashboardLayout.tsx
+
 import { ReactNode, useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import { SidebarProvider } from "@/components/ui/sidebar";
-import { AppSidebar } from "./AppSidebar";
+import { AppSidebar } from "@/components/AppSidebar";
 import { useAuth } from "@/contexts/AuthContext";
+import "./DashboardLayout.css";
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -13,27 +15,27 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const location = useLocation();
   const { reloadUser } = useAuth();
 
-  // scroll to top when pathname changes
+  // Scroll to top on route change
   useEffect(() => {
     window.scrollTo(0, 0);
     document.documentElement.scrollTop = 0;
   }, [location.pathname]);
 
-  // ensure auth state / profile is fresh when layout mounts
+  // Refresh user info when layout mounts
   useEffect(() => {
-    // reloadUser will check token and update context; safe to call repeatedly
-    // (silently returns if no token)
     reloadUser().catch(() => {
-      /* ignore errors here — auth context handles cleanup */
+      // ignore errors; ProtectedRoute handles invalid tokens
     });
   }, [reloadUser]);
 
   return (
     <SidebarProvider>
-      <div className="flex min-h-screen w-full bg-background">
+      <div className="dashboard-container">
         <AppSidebar />
-        <main className="flex-1 overflow-y-auto">
-          <div className="container mx-auto p-6 max-w-7xl">{children}</div>
+        <main className="dashboard-main">
+          <div className="dashboard-content">
+            <div className="content-wrapper">{children}</div>
+          </div>
         </main>
       </div>
     </SidebarProvider>
