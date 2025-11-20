@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { Eye, EyeOff, Mail, Lock, User } from "lucide-react";
-import "./Auth.css";
 
 export default function Auth() {
   const [isLoading, setIsLoading] = useState(false);

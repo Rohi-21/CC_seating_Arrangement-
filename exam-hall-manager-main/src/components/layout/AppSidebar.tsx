@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/sidebar";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
-import "./AppSidebar.css";
+
 
 const menuItems = [
   { key: "dashboard", title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
